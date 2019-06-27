@@ -59,6 +59,7 @@ from allennlp.commands.subcommand import Subcommand
 from allennlp.common.util import prepare_environment
 
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
+from allennlp.data.dataset_mingle import DatasetMingler
 from allennlp.data.iterators import DataIterator
 from allennlp.models.archival import load_archive
 from allennlp.training.util import evaluate
@@ -132,18 +133,35 @@ def evaluate_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     model = archive.model
     model.eval()
 
-    # Load the evaluation data
-
-    # Try to use the validation dataset reader if there is one - otherwise fall back
-    # to the default dataset_reader used for both training and validation.
-    validation_dataset_reader_params = config.pop('validation_dataset_reader', None)
-    if validation_dataset_reader_params is not None:
-        dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
+    use_multi_task = config.pop('multi_task', None)
+    if use_multi_task:
+        validation_dataset_reader_params = config.pop('validation_dataset_readers', None)
+        if validation_dataset_reader_params is not None:
+            dataset_readers = {name: DatasetReader.from_params(reader_params)
+                        for name, reader_params in validation_dataset_reader_params.items()}
+        else:
+            dataset_reader_params = config.pop('dataset_readers', None)
+            dataset_readers = {name: DatasetReader.from_params(reader_params)
+                        for name, reader_params in dataset_reader_params.items()}
+        test_data_paths = config.pop("test_data_paths", None) ## This implementation is quite hacky
+        logger.info("Reading multi-task evaluation data from %s", test_data_paths)
+        instances = {name: reader.read(test_data_paths[name])
+                       for name, reader in dataset_readers.items()}
+        mingler = DatasetMingler.from_params(config.pop('mingler'))
+        instances = list(mingler.mingle(instances))
     else:
-        dataset_reader = DatasetReader.from_params(config.pop('dataset_reader'))
-    evaluation_data_path = args.input_file
-    logger.info("Reading evaluation data from %s", evaluation_data_path)
-    instances = dataset_reader.read(evaluation_data_path)
+        # Load the evaluation data
+
+        # Try to use the validation dataset reader if there is one - otherwise fall back
+        # to the default dataset_reader used for both training and validation.
+        validation_dataset_reader_params = config.pop('validation_dataset_reader', None)
+        if validation_dataset_reader_params is not None:
+            dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
+        else:
+            dataset_reader = DatasetReader.from_params(config.pop('dataset_reader'))
+        evaluation_data_path = args.input_file
+        logger.info("Reading evaluation data from %s", evaluation_data_path)
+        instances = dataset_reader.read(evaluation_data_path)
 
     embedding_sources: Dict[str, str] = (json.loads(args.embedding_sources_mapping)
                                          if args.embedding_sources_mapping else {})

@@ -37,8 +37,9 @@ class TrainerPieces(NamedTuple):
                     serialization_dir: str,
                     recover: bool = False,
                     cache_directory: str = None,
-                    cache_prefix: str = None) -> 'TrainerPieces':
-        all_datasets = training_util.datasets_from_params(params, cache_directory, cache_prefix)
+                    cache_prefix: str = None,
+                    is_mtl: bool = False) -> 'TrainerPieces':
+        all_datasets = training_util.datasets_from_params(params, cache_directory, cache_prefix, is_mtl)
         datasets_for_vocab_creation = set(params.pop("datasets_for_vocab_creation", all_datasets))
 
         for dataset in datasets_for_vocab_creation:

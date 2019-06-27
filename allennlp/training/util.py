@@ -18,6 +18,7 @@ from allennlp.common.params import Params
 from allennlp.common.tqdm import Tqdm
 from allennlp.data.dataset_readers import DatasetReader
 from allennlp.data import Instance
+from allennlp.data.dataset_mingle import DatasetMingler
 from allennlp.data.iterators import DataIterator
 from allennlp.data.iterators.data_iterator import TensorDict
 from allennlp.models.model import Model
@@ -127,7 +128,8 @@ def str_to_time(time_str: str) -> datetime.datetime:
 
 def datasets_from_params(params: Params,
                          cache_directory: str = None,
-                         cache_prefix: str = None) -> Dict[str, Iterable[Instance]]:
+                         cache_prefix: str = None,
+                         mtl_datasets: bool = False) -> Dict[str, Iterable[Instance]]:
     """
     Load all the datasets specified by the config.
 
@@ -154,7 +156,12 @@ def datasets_from_params(params: Params,
         allow you to give recognizable names to these prefixes if you want them, you can manually
         specify the ``cache_prefix``.  Note that in some rare cases this can be dangerous, as we'll
         use the `same` prefix for both train and validation dataset readers.
+    mtl_datasets: ``bool``, optional, default: False
+        This will try to read multiple datasets under a multi_task learning setting.
+        See configuration from: https://github.com/allenai/allennlp/blob/master/allennlp/tests/training/multi_task_trainer_test.py
     """
+    if mtl_datasets:
+        return mtl_datasets_from_params(params, cache_directory, cache_prefix)
     dataset_reader_params = params.pop('dataset_reader')
     validation_dataset_reader_params = params.pop('validation_dataset_reader', None)
     train_cache_dir, validation_cache_dir = _set_up_cache_files(dataset_reader_params,
@@ -190,6 +197,60 @@ def datasets_from_params(params: Params,
         logger.info("Reading test data from %s", test_data_path)
         test_data = validation_and_test_dataset_reader.read(test_data_path)
         datasets["test"] = test_data
+
+    return datasets
+
+
+def mtl_datasets_from_params(params: Params,
+                         cache_directory: str = None,
+                         cache_prefix: str = None)  -> Dict[str, Iterable[Instance]]:
+
+    dataset_reader_params = params.pop('dataset_readers')
+    validation_dataset_reader_params = params.pop('validation_dataset_readers', None)
+    train_cache_dir, validation_cache_dir = _set_up_cache_files(dataset_reader_params,
+                                                                validation_dataset_reader_params,
+                                                                cache_directory,
+                                                                cache_prefix)
+
+    dataset_readers =  {name: DatasetReader.from_params(reader_params)
+                        for name, reader_params in dataset_reader_params.items()}
+
+    validation_and_test_dataset_readers: Dict[str, DatasetReader] = dataset_readers
+    if validation_dataset_reader_params is not None:
+        logger.info("Using a separate dataset reader to load validation and test data.")
+        validation_and_test_dataset_readers = {name: DatasetReader.from_params(reader_params)
+                        for name, reader_params in validation_dataset_reader_params.items()}
+
+    if train_cache_dir:
+        for _, reader in dataset_readers.items():
+            reader.cache_data(train_cache_dir)
+        for _, reader in validation_and_test_dataset_readers.items():
+            reader.cache_data(validation_cache_dir)
+
+    train_data_paths =  params.pop('train_data_paths')
+
+    logger.info("Reading (multi-task) training data from %s", train_data_paths)
+    train_datas = {name: reader.read(train_data_paths[name])
+                for name, reader in dataset_readers.items()}
+    mingler = DatasetMingler.from_params(params.pop('mingler'))
+
+    train_datas = list(mingler.mingle(train_datas))
+
+    datasets: Dict[str, Iterable[Instance]] = {"train": train_datas}
+
+    validation_data_paths = params.pop('validation_data_paths', None)
+    if validation_data_paths is not None:
+        logger.info("Reading (multi-task) validation data from %s", validation_data_paths)
+        validation_datas = {name: reader.read(validation_data_paths[name])
+                for name, reader in validation_and_test_dataset_readers.items()}
+        datasets["validation"] = list(mingler.mingle(validation_datas))
+
+    test_data_paths = params.pop("test_data_paths", None)
+    if test_data_paths is not None:
+        logger.info("Reading (multi-task) test data from %s", test_data_paths)
+        test_datas = {name: reader.read(test_data_paths[name])
+                for name, reader in validation_and_test_dataset_readers.items()}
+        datasets["test"] = list(mingler.mingle(test_datas))
 
     return datasets
 
