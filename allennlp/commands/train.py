@@ -210,13 +210,16 @@ def train_model(params: Params,
 
     trainer_type = params.get("trainer", {}).get("type", "default")
 
+    using_multitask = params.pop_bool("multi_task", False)
+
     if trainer_type == "default":
         # Special logic to instantiate backward-compatible trainer.
         pieces = TrainerPieces.from_params(params,  # pylint: disable=no-member
                                            serialization_dir,
                                            recover,
                                            cache_directory,
-                                           cache_prefix)
+                                           cache_prefix,
+                                           using_multitask)
         trainer = Trainer.from_params(
                 model=pieces.model,
                 serialization_dir=serialization_dir,

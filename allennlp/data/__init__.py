@@ -6,3 +6,5 @@ from allennlp.data.token_indexers.token_indexer import TokenIndexer, TokenType
 from allennlp.data.tokenizers.token import Token
 from allennlp.data.tokenizers.tokenizer import Tokenizer
 from allennlp.data.vocabulary import Vocabulary
+from allennlp.data.dataset_mingle import RoundRobinMingler
+from allennlp.data.dataset_mingle import DatasetMingler
