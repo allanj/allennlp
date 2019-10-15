@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from overrides import overrides
 import torch
@@ -6,7 +6,7 @@ import torch
 from allennlp.data import Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import Seq2SeqEncoder, Seq2VecEncoder, TextFieldEmbedder
-from allennlp.nn import InitializerApplicator
+from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask
 from allennlp.training.metrics import CategoricalAccuracy
 
@@ -41,18 +41,24 @@ class BasicClassifier(Model):
         Vocabulary namespace corresponding to labels. By default, we use the "labels" namespace.
     initializer : ``InitializerApplicator``, optional (default=``InitializerApplicator()``)
         If provided, will be used to initialize the model parameters.
+    regularizer : ``RegularizerApplicator``, optional (default=``None``)
+        If provided, will be used to calculate the regularization penalty during training.
     """
-    def __init__(self,
-                 vocab: Vocabulary,
-                 text_field_embedder: TextFieldEmbedder,
-                 seq2vec_encoder: Seq2VecEncoder,
-                 seq2seq_encoder: Seq2SeqEncoder = None,
-                 dropout: float = None,
-                 num_labels: int = None,
-                 label_namespace: str = "labels",
-                 initializer: InitializerApplicator = InitializerApplicator()) -> None:
 
-        super().__init__(vocab)
+    def __init__(
+        self,
+        vocab: Vocabulary,
+        text_field_embedder: TextFieldEmbedder,
+        seq2vec_encoder: Seq2VecEncoder,
+        seq2seq_encoder: Seq2SeqEncoder = None,
+        dropout: float = None,
+        num_labels: int = None,
+        label_namespace: str = "labels",
+        initializer: InitializerApplicator = InitializerApplicator(),
+        regularizer: Optional[RegularizerApplicator] = None,
+    ) -> None:
+
+        super().__init__(vocab, regularizer)
         self._text_field_embedder = text_field_embedder
 
         if seq2seq_encoder:
@@ -79,10 +85,10 @@ class BasicClassifier(Model):
         self._loss = torch.nn.CrossEntropyLoss()
         initializer(self)
 
-    def forward(self,  # type: ignore
-                tokens: Dict[str, torch.LongTensor],
-                label: torch.IntTensor = None) -> Dict[str, torch.Tensor]:
-        # pylint: disable=arguments-differ
+    def forward(  # type: ignore
+        self, tokens: Dict[str, torch.LongTensor], label: torch.IntTensor = None
+    ) -> Dict[str, torch.Tensor]:
+
         """
         Parameters
         ----------
@@ -141,12 +147,13 @@ class BasicClassifier(Model):
         classes = []
         for prediction in predictions_list:
             label_idx = prediction.argmax(dim=-1).item()
-            label_str = (self.vocab.get_index_to_token_vocabulary(self._label_namespace)
-                         .get(label_idx, str(label_idx)))
+            label_str = self.vocab.get_index_to_token_vocabulary(self._label_namespace).get(
+                label_idx, str(label_idx)
+            )
             classes.append(label_str)
         output_dict["label"] = classes
         return output_dict
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        metrics = {'accuracy': self._accuracy.get_metric(reset)}
+        metrics = {"accuracy": self._accuracy.get_metric(reset)}
         return metrics
