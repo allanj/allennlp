@@ -33,8 +33,9 @@ class TrainerPieces(NamedTuple):
     validation_iterator: DataIterator
     params: Params
 
-    @staticmethod
-    def from_params(params: Params,
+    @classmethod
+    def from_params(cls,
+                    params: Params,
                     serialization_dir: str,
                     recover: bool = False,
                     cache_directory: str = None,
