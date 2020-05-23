@@ -109,7 +109,7 @@ class Predict(Subcommand):
         subparser.add_argument(
             "--dataset-reader-choice",
             type=str,
-            choices=["train", "validation"],
+            #choices=["train", "validation"],
             default="validation",
             help="Indicates which model dataset reader to use if the --use-dataset-reader "
             "flag is set.",

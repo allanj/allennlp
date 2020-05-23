@@ -297,9 +297,16 @@ class Predictor(Registrable):
 
         if dataset_reader_to_load == "validation" and "validation_dataset_reader" in config:
             dataset_reader_params = config["validation_dataset_reader"]
+            dataset_reader = DatasetReader.from_params(dataset_reader_params)
+        elif dataset_reader_to_load != "dataset_reader" and config["multi_task"]:
+            # print(dataset_reader_to_load)
+            dataset_reader_params = config.pop('dataset_readers', None)
+            dataset_readers = {name: DatasetReader.from_params(reader_params)
+                               for name, reader_params in dataset_reader_params.items()}
+            dataset_reader = dataset_readers[dataset_reader_to_load]
         else:
             dataset_reader_params = config["dataset_reader"]
-        dataset_reader = DatasetReader.from_params(dataset_reader_params)
+            dataset_reader = DatasetReader.from_params(dataset_reader_params)
 
         model = archive.model
         model.eval()
